@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TruthScan — Fake News Detector</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f0e8;
+  --paper: #faf7f2;
+  --ink: #1a1510;
+  --dim: #6b6256;
+  --border: #d4c9b8;
+  --red: #c0392b;
+  --green: #1a6b3a;
+  --amber: #b8670a;
+  --blue: #1a4a7a;
+  --red-bg: #fdf0ee;
+  --green-bg: #eef7f1;
+  --amber-bg: #fdf5e8;
+  --blue-bg: #eef3fa;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Source Serif 4', serif;
+  min-height: 100vh;
+}
+
+/* Newspaper texture */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(0,0,0,0.015) 28px, rgba(0,0,0,0.015) 29px);
+  pointer-events:none; z-index:0;
+}
+
+.page {
+  position:relative; z-index:1;
+  max-width:860px;
+  margin:0 auto;
+  padding:0 20px 60px;
+}
+
+/* Masthead */
+.masthead {
+  border-bottom: 4px double var(--ink);
+  padding: 28px 0 16px;
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.masthead-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--dim);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 1px;
+}
+
+.masthead-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 72px;
+  letter-spacing: 3px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.masthead-title span { color: var(--red); }
+
+.masthead-sub {
+  font-size: 13px;
+  color: var(--dim);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Input section */
+.input-section {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 28px;
+  margin-bottom: 28px;
+  box-shadow: 2px 2px 0 var(--border);
+}
+
+.input-label {
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.headline-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 14px 16px;
+  font-family: 'Source Serif 4', serif;
+  font-size: 16px;
+  color: var(--ink);
+  outline: none;
+  resize: vertical;
+  min-height: 90px;
+  line-height: 1.6;
+  transition: border-color 0.2s;
+}
+
+.headline-input:focus { border-color: var(--ink); }
+.headline-input::placeholder { color: var(--dim); font-style: italic; }
+
+.examples-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  margin-bottom: 16px;
+}
+
+.ex-label { font-size: 11px; color: var(--dim); font-family: 'JetBrains Mono', monospace; align-self: center; }
+
+.ex-chip {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 10px;
+  font-family: 'Source Serif 4', serif;
+  font-size: 12px;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ex-chip:hover { border-color: var(--ink); color: var(--ink); }
+
+.scan-btn {
+  width: 100%;
+  background: var(--ink);
+  border: none;
+  border-radius: 3px;
+  padding: 14px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  letter-spacing: 3px;
+  color: var(--bg);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scan-btn:hover { background: #2d2520; transform: translateY(-1px); }
+.scan-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Results */
+.results { display: none; }
+.results.visible { display: block; animation: fadeUp 0.4s ease; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+
+/* Verdict banner */
+.verdict-banner {
+  border: 2px solid;
+  border-radius: 4px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.verdict-banner.credible   { border-color: var(--green); background: var(--green-bg); }
+.verdict-banner.mixed      { border-color: var(--amber); background: var(--amber-bg); }
+.verdict-banner.suspicious { border-color: var(--red);   background: var(--red-bg);   }
+
+.verdict-icon { font-size: 48px; flex-shrink: 0; }
+
+.verdict-text { flex: 1; }
+
+.verdict-label {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 32px;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+
+.verdict-banner.credible   .verdict-label { color: var(--green); }
+.verdict-banner.mixed      .verdict-label { color: var(--amber); }
+.verdict-banner.suspicious .verdict-label { color: var(--red);   }
+
+.verdict-sub { font-size: 13px; color: var(--dim); font-style: italic; }
+
+/* Score meter */
+.score-section {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 22px 28px;
+  margin-bottom: 20px;
+  box-shadow: 2px 2px 0 var(--border);
+}
+
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.score-num {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 56px;
+  line-height: 1;
+  min-width: 80px;
+}
+
+.score-track {
+  flex: 1;
+  height: 12px;
+  background: var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.score-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 1s ease;
+}
+
+.score-label {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Sub scores */
+.subscores {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.subscore {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 10px;
+  text-align: center;
+}
+
+.subscore-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 28px;
+  line-height: 1;
+  margin-bottom: 3px;
+}
+
+.subscore-lbl {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Analysis cards */
+.analysis-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.analysis-card {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 18px;
+  box-shadow: 2px 2px 0 var(--border);
+}
+
+.card-title {
+  font-size: 10px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.flag-list { display: flex; flex-direction: column; gap: 7px; }
+
+.flag-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.flag-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.flag-dot.red    { background: var(--red);   }
+.flag-dot.amber  { background: var(--amber); }
+.flag-dot.green  { background: var(--green); }
+.flag-dot.blue   { background: var(--blue);  }
+
+.flag-word {
+  font-weight: 600;
+  font-style: italic;
+}
+
+.flag-word.red   { color: var(--red);   }
+.flag-word.amber { color: var(--amber); }
+.flag-word.green { color: var(--green); }
+.flag-word.blue  { color: var(--blue);  }
+
+.no-flags {
+  font-size: 13px;
+  color: var(--dim);
+  font-style: italic;
+}
+
+/* Highlighted text */
+.highlighted-text {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 22px 28px;
+  margin-bottom: 20px;
+  box-shadow: 2px 2px 0 var(--border);
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+mark.red    { background: rgba(192,57,43,0.15);  color: var(--red);   border-radius: 3px; padding: 1px 3px; font-weight: 600; }
+mark.amber  { background: rgba(184,103,10,0.15); color: var(--amber); border-radius: 3px; padding: 1px 3px; font-weight: 600; }
+mark.green  { background: rgba(26,107,58,0.15);  color: var(--green); border-radius: 3px; padding: 1px 3px; font-weight: 600; }
+
+/* What to do */
+.advice-card {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 22px 28px;
+  margin-bottom: 20px;
+  box-shadow: 2px 2px 0 var(--border);
+}
+
+.advice-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  letter-spacing: 2px;
+  margin-bottom: 14px;
+}
+
+.advice-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+
+.advice-list li {
+  display: flex;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.advice-list li::before {
+  content: '→';
+  color: var(--dim);
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Reset btn */
+.reset-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 10px 20px;
+  font-family: 'Source Serif 4', serif;
+  font-size: 14px;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reset-btn:hover { border-color: var(--ink); color: var(--ink); }
+
+.disclaimer {
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  margin-top: 20px;
+  font-style: italic;
+  line-height: 1.7;
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="masthead">
+    <div class="masthead-top">
+      <span id="dateStamp"></span>
+      <span>AI-POWERED CREDIBILITY ANALYSIS</span>
+      <span>EST. 2025</span>
+    </div>
+    <div class="masthead-title">TRUTH<span>SCAN</span></div>
+    <div class="masthead-sub">The Fake News Detector · Analyse Any Headline or Article</div>
+  </div>
+
+  <div class="input-section">
+    <label class="input-label">Paste your headline or article text</label>
+    <textarea class="headline-input" id="textInput" placeholder="e.g. Scientists SHOCKED to discover that vaccines cause autism — government covering up the TRUTH!"></textarea>
+
+    <div class="examples-row">
+      <span class="ex-label">Try:</span>
+      <button class="ex-chip" onclick="fillEx(0)">Miracle cure</button>
+      <button class="ex-chip" onclick="fillEx(1)">Coffee study</button>
+      <button class="ex-chip" onclick="fillEx(2)">5G conspiracy</button>
+      <button class="ex-chip" onclick="fillEx(3)">NASA discovery</button>
+      <button class="ex-chip" onclick="fillEx(4)">Clickbait</button>
+    </div>
+
+    <button class="scan-btn" id="scanBtn" onclick="analyse()">SCAN FOR TRUTH</button>
+  </div>
+
+  <div class="results" id="results">
+    <div class="verdict-banner" id="verdictBanner">
+      <div class="verdict-icon" id="verdictIcon"></div>
+      <div class="verdict-text">
+        <div class="verdict-label" id="verdictLabel"></div>
+        <div class="verdict-sub" id="verdictSub"></div>
+      </div>
+    </div>
+
+    <div class="score-section">
+      <div class="score-row">
+        <div class="score-num" id="scoreNum" style="color:var(--red)">0</div>
+        <div style="flex:1">
+          <div class="score-label" style="margin-bottom:6px">Credibility Score</div>
+          <div class="score-track">
+            <div class="score-fill" id="scoreFill" style="width:0%"></div>
+          </div>
+        </div>
+        <div style="font-size:13px;color:var(--dim);font-family:'JetBrains Mono',monospace">/ 100</div>
+      </div>
+      <div class="subscores" id="subscores"></div>
+    </div>
+
+    <!-- Highlighted text -->
+    <div class="score-section">
+      <div class="card-title">Annotated Text — Flagged Words Highlighted</div>
+      <div class="highlighted-text" id="highlightedText"></div>
+    </div>
+
+    <div class="analysis-grid">
+      <div class="analysis-card">
+        <div class="card-title">Red Flags Detected</div>
+        <div class="flag-list" id="redFlags"></div>
+      </div>
+      <div class="analysis-card">
+        <div class="card-title">Credibility Signals</div>
+        <div class="flag-list" id="greenFlags"></div>
+      </div>
+      <div class="analysis-card">
+        <div class="card-title">Emotional Language</div>
+        <div class="flag-list" id="emotionFlags"></div>
+      </div>
+      <div class="analysis-card">
+        <div class="card-title">Writing Style Analysis</div>
+        <div class="flag-list" id="styleFlags"></div>
+      </div>
+    </div>
+
+    <div class="advice-card">
+      <div class="advice-title">What Should You Do?</div>
+      <ul class="advice-list" id="adviceList"></ul>
+    </div>
+
+    <button class="reset-btn" onclick="resetForm()">← Analyse another headline</button>
+
+    <div class="disclaimer">
+      TruthScan uses pattern-matching analysis — it is a tool to help you think critically, not a definitive fact-checker.<br>
+      Always verify important news with multiple trusted sources.
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Set date
+document.getElementById('dateStamp').textContent = new Date().toLocaleDateString('en-GB', {weekday:'long',year:'numeric',month:'long',day:'numeric'}).toUpperCase();
+
+// ── WORD DATABASES ────────────────────────────────────────────────
+
+const EXTRAORDINARY_CLAIMS = [
+  'alien','aliens','ufo','ufos','extraterrestrial','life detected','life discovered',
+  'time travel','time machine','immortality','never die','live forever',
+  'teleportation','teleported','mind control','mind reading','psychic',
+  'bigfoot','loch ness','flat earth','moon landing fake','moon landing hoax',
+  'reptilian','illuminati','chemtrails','chemtrail',
+  'cure for cancer','cancer cured','cancer cure',
+  'free energy','unlimited energy','zero point energy',
+  'government admit','government admits','government confesses',
+  'cia admits','fbi admits','nasa admits','nasa confirms alien',
+  'second sun','planet x','nibiru','end of the world','world ending',
+  'rapture','apocalypse','doomsday',
+];
+
+const RED_FLAGS = {
+  // Sensationalism
+  'SHOCKING': 'sensational capitalisation',
+  'SHOCKING!': 'sensational capitalisation',
+  'SHOCKING:': 'sensational capitalisation',
+  'shocked': 'sensationalist language',
+  'SHOCKED': 'sensationalist language',
+  'bombshell': 'sensationalist language',
+  'BOMBSHELL': 'sensationalist language',
+  'explosive': 'sensationalist language',
+  'EXPLOSIVE': 'sensationalist language',
+  'BREAKING': 'unverified breaking news claim',
+  'EXCLUSIVE': 'manufactured exclusivity',
+  'SECRET': 'conspiracy framing',
+  'secret': 'conspiracy framing',
+  'SECRETLY': 'conspiracy framing',
+  'secretly': 'conspiracy framing',
+  'EXPOSED': 'conspiracy framing',
+  'exposed': 'conspiracy framing',
+  'EXPOSES': 'conspiracy framing',
+  'exposes': 'conspiracy framing',
+  'TRUTH': 'truth-claiming language',
+  'the truth': 'truth-claiming language',
+  'THEY': 'vague "they" conspiracy framing',
+  'they dont want': 'conspiracy framing',
+  'dont want you': 'conspiracy framing',
+  'covering up': 'unsubstantiated cover-up claim',
+  'cover-up': 'unsubstantiated cover-up claim',
+  'COVER-UP': 'unsubstantiated cover-up claim',
+  'HIDING': 'conspiracy framing',
+  'hiding': 'conspiracy framing',
+  'whistleblower': 'unverified source',
+  'WHISTLEBLOWER': 'unverified source',
+  'government SECRETLY': 'conspiracy framing',
+  'share before': 'manufactured urgency / censorship claim',
+  'before they delete': 'manufactured censorship claim',
+  'DELETE': 'manufactured censorship claim',
+  'WON\'T BELIEVE': 'clickbait language',
+  'won\'t believe': 'clickbait language',
+  'miracle': 'miracle claim — extraordinary without evidence',
+  'MIRACLE': 'miracle claim — extraordinary without evidence',
+  'cure': 'unqualified medical cure claim',
+  'Big Pharma': 'conspiracy framing against institutions',
+  'deep state': 'conspiracy terminology',
+  'mainstream media': 'loaded anti-media framing',
+  'fake news': 'politicised delegitimisation term',
+  'theyre hiding': 'conspiracy framing',
+  'plotting': 'unsubstantiated conspiracy claim',
+  'PLOTTING': 'unsubstantiated conspiracy claim',
+  'control your mind': 'extreme conspiracy claim',
+  '5G': 'frequently misused conspiracy topic',
+  'microchip': 'common conspiracy claim',
+  'New World Order': 'conspiracy terminology',
+  'WAKE UP': 'conspiracy call-to-action',
+  'wake up': 'conspiracy call-to-action',
+  'sheeple': 'derogatory conspiracy framing',
+  'plandemic': 'conspiracy terminology',
+  'hoax': 'unsubstantiated claim',
+  'HOAX': 'unsubstantiated claim',
+  '!!': 'excessive punctuation — credibility concern',
+  '!!!': 'excessive punctuation — credibility concern',
+};
+
+const EMOTIONAL_WORDS = [
+  'outrageous','outrage','OUTRAGE','shocking','terrifying','terrified',
+  'horrifying','horrified','disgusting','disgusted','furious','fury',
+  'rage','enraged','devastating','destroyed','obliterated','annihilated',
+  'catastrophic','catastrophe','disaster','disaster!','crisis','CRISIS',
+  'emergency','EMERGENCY','panic','PANIC','fear','FEAR','danger','DANGER',
+  'threat','THREAT','attack','ATTACK','evil','EVIL','corrupt','CORRUPT',
+  'monster','criminal','liar','LIAR','fraud','FRAUD','scam','SCAM',
+  'stealing','robbing','destroying','ruining','collapsing','imploding',
+];
+
+const CREDIBILITY_SIGNALS = [
+  { words: ['study', 'studies', 'research', 'researchers'], label: 'References research or studies', color: 'green' },
+  { words: ['according to', 'said', 'stated', 'confirmed'], label: 'Attributes claims to sources', color: 'green' },
+  { words: ['university', 'journal', 'published', 'peer-reviewed'], label: 'Cites academic sources', color: 'green' },
+  { words: ['percent', '%', 'data', 'statistics', 'statistic'], label: 'Includes data or statistics', color: 'green' },
+  { words: ['nasa', 'who', 'cdc', 'government', 'official'], label: 'References official body', color: 'blue' },
+  { words: ['may', 'might', 'could', 'suggests', 'indicates', 'linked'], label: 'Uses appropriately cautious language', color: 'green' },
+  { words: ['however', 'but', 'although', 'despite', 'while'], label: 'Acknowledges nuance or counterpoints', color: 'green' },
+];
+
+const STYLE_CHECKS = [
+  { test: t => (t.match(/[A-Z]{3,}/g)||[]).length > 3, label: 'Excessive use of ALL CAPS (4+ instances)', color: 'red', score: -15 },
+  { test: t => (t.match(/!/g)||[]).length > 2, label: 'Multiple exclamation marks', color: 'red', score: -10 },
+  { test: t => (t.match(/\?{2,}/g)||[]).length > 0, label: 'Multiple question marks (??)', color: 'red', score: -8 },
+  { test: t => t.split(' ').length < 6, label: 'Very short headline — little context provided', color: 'amber', score: -5 },
+  { test: t => t.split(' ').length > 8 && !t.includes('!') && !t.includes('?'), label: 'Moderate length without hyperbole', color: 'green', score: 5 },
+  { test: t => /^[A-Z\s]+$/.test(t.trim()), label: 'Entire text in capitals — extreme concern', color: 'red', score: -20 },
+  { test: t => (t.match(/\b(they|them|those people)\b/gi)||[]).length > 1, label: 'Repeated use of vague "they/them" — conspiracy indicator', color: 'red', score: -10 },
+  { test: t => t.includes('share') && (t.includes('before') || t.includes('delete')), label: 'Urgency to share before deletion — censorship manipulation', color: 'red', score: -20 },
+  { test: t => /[a-z][A-Z]/.test(t) || (t.match(/[A-Z]{3,}/g)||[]).length > 5, label: 'Irregular capitalisation throughout', color: 'amber', score: -8 },
+];
+
+// ── ANALYSE ───────────────────────────────────────────────────────
+function analyse() {
+  const text = document.getElementById('textInput').value.trim();
+  if (!text) return;
+
+  let score = 70; // start at 70
+  const foundRed     = [];
+  const foundEmotion = [];
+  const foundGreen   = [];
+  const foundStyle   = [];
+  const highlights   = {}; // word → class
+
+  // Check red flags
+  for (const [phrase, reason] of Object.entries(RED_FLAGS)) {
+    const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
+    if (regex.test(text)) {
+      foundRed.push({ word: phrase, reason });
+      score -= 8;
+      highlights[phrase.toLowerCase()] = 'red';
+    }
+  }
+
+  // Check emotional words
+  for (const word of EMOTIONAL_WORDS) {
+    const regex = new RegExp('\\b' + word.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\b', 'gi');
+    if (regex.test(text)) {
+      foundEmotion.push({ word, reason: 'emotionally charged language' });
+      score -= 4;
+      highlights[word.toLowerCase()] = 'amber';
+    }
+  }
+
+  // Check credibility signals
+  for (const signal of CREDIBILITY_SIGNALS) {
+    for (const word of signal.words) {
+      if (text.toLowerCase().includes(word.toLowerCase())) {
+        foundGreen.push({ word, reason: signal.label, color: signal.color });
+        score += 6;
+        highlights[word.toLowerCase()] = 'green';
+        break;
+      }
+    }
+  }
+
+  // Check style
+  for (const check of STYLE_CHECKS) {
+    if (check.test(text)) {
+      foundStyle.push({ word: '', reason: check.label, color: check.color });
+      score += check.score;
+    }
+  }
+
+  // Check extraordinary claims — require strong evidence
+  const lowerText = text.toLowerCase();
+  for (const claim of EXTRAORDINARY_CLAIMS) {
+    if (lowerText.includes(claim)) {
+      // Only penalise if no credibility signals found
+      if (foundGreen.length === 0) {
+        foundRed.push({ word: claim, reason: 'extraordinary claim with no cited source or evidence' });
+        score -= 25;
+      } else {
+        foundRed.push({ word: claim, reason: 'extraordinary claim — verify the cited source carefully' });
+        score -= 10;
+      }
+      highlights[claim] = 'red';
+      break;
+    }
+  }
+
+  // Short text with no signals = uncertain, not credible
+  if (text.split(' ').length < 8 && foundGreen.length === 0) {
+    score -= 15;
+    foundStyle.push({ word:'', reason:'Very short with no source cited — not enough context to verify', color:'red' });
+  }
+
+  score = Math.max(0, Math.min(100, score));
+
+  // Verdict
+  let verdict, verdictSub, verdictClass, verdictIcon, scoreColor;
+  if (score >= 65) {
+    verdict = 'Likely Credible'; verdictSub = 'This text shows signs of responsible journalism. Still verify with multiple sources.';
+    verdictClass = 'credible'; verdictIcon = '✅'; scoreColor = 'var(--green)';
+  } else if (score >= 35) {
+    verdict = 'Mixed Signals'; verdictSub = 'This text has both credibility signals and red flags. Approach with caution and verify.';
+    verdictClass = 'mixed'; verdictIcon = '⚠️'; scoreColor = 'var(--amber)';
+  } else {
+    verdict = 'Likely Misleading'; verdictSub = 'Multiple red flags detected. This text shows strong signs of misinformation or manipulation.';
+    verdictClass = 'suspicious'; verdictIcon = '🚨'; scoreColor = 'var(--red)';
+  }
+
+  // Render verdict
+  const banner = document.getElementById('verdictBanner');
+  banner.className = 'verdict-banner ' + verdictClass;
+  document.getElementById('verdictIcon').textContent = verdictIcon;
+  document.getElementById('verdictLabel').textContent = verdict;
+  document.getElementById('verdictSub').textContent   = verdictSub;
+
+  // Render score
+  document.getElementById('scoreNum').textContent = score;
+  document.getElementById('scoreNum').style.color = scoreColor;
+  const fill = document.getElementById('scoreFill');
+  fill.style.background = scoreColor;
+  setTimeout(() => fill.style.width = score + '%', 50);
+
+  // Sub scores
+  const emotionScore = Math.max(0, 100 - foundEmotion.length * 15);
+  const biasScore    = Math.max(0, 100 - foundRed.length * 12);
+  const sourceScore  = Math.min(100, foundGreen.length * 20);
+  const styleScore   = Math.max(0, 100 - foundStyle.filter(s=>s.color==='red').length * 18);
+
+  document.getElementById('subscores').innerHTML = [
+    { label: 'Emotion', val: emotionScore },
+    { label: 'Bias',    val: biasScore    },
+    { label: 'Sources', val: sourceScore  },
+    { label: 'Style',   val: styleScore   },
+  ].map(s => {
+    const col = s.val >= 65 ? 'var(--green)' : s.val >= 35 ? 'var(--amber)' : 'var(--red)';
+    return `<div class="subscore">
+      <div class="subscore-val" style="color:${col}">${s.val}</div>
+      <div class="subscore-lbl">${s.label}</div>
+    </div>`;
+  }).join('');
+
+  // Highlighted text
+  let highlighted = text;
+  // Sort by length descending to replace longer phrases first
+  const sortedHighlights = Object.entries(highlights).sort((a,b) => b[0].length - a[0].length);
+  for (const [word, cls] of sortedHighlights) {
+    const regex = new RegExp('(' + word.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+    highlighted = highlighted.replace(regex, `<mark class="${cls}">$1</mark>`);
+  }
+  document.getElementById('highlightedText').innerHTML = highlighted;
+
+  // Red flags list
+  const rfEl = document.getElementById('redFlags');
+  rfEl.innerHTML = foundRed.length ? foundRed.slice(0,6).map(f =>
+    `<div class="flag-item"><div class="flag-dot red"></div><div><span class="flag-word red">"${f.word}"</span> — ${f.reason}</div></div>`
+  ).join('') : '<div class="no-flags">No major red flags detected.</div>';
+
+  // Green flags list
+  const gfEl = document.getElementById('greenFlags');
+  gfEl.innerHTML = foundGreen.length ? foundGreen.slice(0,6).map(f =>
+    `<div class="flag-item"><div class="flag-dot ${f.color}"></div><div><span class="flag-word ${f.color}">"${f.word}"</span> — ${f.reason}</div></div>`
+  ).join('') : '<div class="no-flags">No credibility signals detected.</div>';
+
+  // Emotion flags
+  const efEl = document.getElementById('emotionFlags');
+  efEl.innerHTML = foundEmotion.length ? foundEmotion.slice(0,6).map(f =>
+    `<div class="flag-item"><div class="flag-dot amber"></div><div><span class="flag-word amber">"${f.word}"</span> — ${f.reason}</div></div>`
+  ).join('') : '<div class="no-flags">No emotionally charged language detected.</div>';
+
+  // Style flags
+  const sfEl = document.getElementById('styleFlags');
+  sfEl.innerHTML = foundStyle.length ? foundStyle.slice(0,6).map(f =>
+    `<div class="flag-item"><div class="flag-dot ${f.color}"></div><div>${f.reason}</div></div>`
+  ).join('') : '<div class="no-flags">Writing style appears normal.</div>';
+
+  // Advice
+  const advice = [];
+  if (score < 40) {
+    advice.push('Do NOT share this without verifying with a trusted news source first.');
+    advice.push('Search the headline on Google News — if no reputable outlets cover it, it\'s likely false.');
+    advice.push('Check fact-checking sites like Snopes, PolitiFact, or FactCheck.org.');
+  } else if (score < 65) {
+    advice.push('Treat this with caution — verify the claims before sharing.');
+    advice.push('Look for the original source or study being referenced.');
+    advice.push('Check if multiple reputable news outlets are reporting the same thing.');
+  } else {
+    advice.push('This appears relatively credible but always verify important claims.');
+    advice.push('Check that the source publication is a known, reputable outlet.');
+    advice.push('Look for a date — old articles can be recirculated out of context.');
+  }
+  advice.push('Remember: even credible-looking headlines can omit important context.');
+
+  document.getElementById('adviceList').innerHTML = advice.map(a => `<li>${a}</li>`).join('');
+
+  document.getElementById('results').classList.add('visible');
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+const EXAMPLES = [
+  "Scientists SHOCKED: Miracle cure they don't want you to know about — Big Pharma is HIDING this!",
+  "New study finds moderate coffee consumption linked to reduced risk of type 2 diabetes, researchers say",
+  "BREAKING: Government SECRETLY plotting to control your mind through 5G towers — whistleblower EXPOSES the truth!",
+  "NASA confirms water ice found in permanently shadowed craters near Moon's south pole",
+  "You WON'T BELIEVE what this politician did — share before they DELETE this!!!",
+];
+
+function fillEx(i) {
+  document.getElementById('textInput').value = EXAMPLES[i];
+}
+
+function resetForm() {
+  document.getElementById('results').classList.remove('visible');
+  document.getElementById('textInput').value = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.getElementById('textInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) analyse();
+});
+</script>
+</body>
+</html>
